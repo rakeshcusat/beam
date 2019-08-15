@@ -956,16 +956,20 @@ class FnApiRunner(runner.PipelineRunner):
         if request_type == 'get':
           data, continuation_token = self._state.blocking_get(
               request.state_key, request.get.continuation_token)
+          # TODO: We need to return the cache_token here if it is associated
+          # with the data.
           yield beam_fn_api_pb2.StateResponse(
               id=request.id,
               get=beam_fn_api_pb2.StateGetResponse(
                   data=data, continuation_token=continuation_token))
         elif request_type == 'append':
+          # TODO: we need to return the cache token here if it is associated.
           self._state.blocking_append(request.state_key, request.append.data)
           yield beam_fn_api_pb2.StateResponse(
               id=request.id,
               append=beam_fn_api_pb2.StateAppendResponse())
         elif request_type == 'clear':
+          # TODO: we need to return the cache token here if it is associated.
           self._state.blocking_clear(request.state_key)
           yield beam_fn_api_pb2.StateResponse(
               id=request.id,
@@ -1619,6 +1623,7 @@ class BundleManager(object):
             process_bundle_id, transform_id, elements)
 
     # Actually start the bundle.
+    # TODO: need to make changes here to pass the cache token.
     process_bundle_req = beam_fn_api_pb2.InstructionRequest(
         instruction_id=process_bundle_id,
         process_bundle=beam_fn_api_pb2.ProcessBundleRequest(

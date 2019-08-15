@@ -535,6 +535,7 @@ class GrpcStateHandler(object):
     self._exc_info = None
     self._context = threading.local()
     self.start()
+    self.cache_tokens = set()
 
   @contextlib.contextmanager
   def process_instruction_id(self, bundle_id):
@@ -583,19 +584,28 @@ class GrpcStateHandler(object):
             state_key=state_key,
             get=beam_fn_api_pb2.StateGetRequest(
                 continuation_token=continuation_token)))
+    if response.cache_token:
+      # TODO: need to cache this.
+      pass
     return response.get.data, response.get.continuation_token
 
   def blocking_append(self, state_key, data):
-    self._blocking_request(
+    response = self._blocking_request(
         beam_fn_api_pb2.StateRequest(
             state_key=state_key,
             append=beam_fn_api_pb2.StateAppendRequest(data=data)))
+    if response.cache_token:
+      # TODO: need to cache this
+      pass
 
   def blocking_clear(self, state_key):
-    self._blocking_request(
+    response = self._blocking_request(
         beam_fn_api_pb2.StateRequest(
             state_key=state_key,
             clear=beam_fn_api_pb2.StateClearRequest()))
+    if response.cache_token:
+      # TODO: need to cache this
+      pass
 
   def _blocking_request(self, request):
     request.id = self._next_id()
