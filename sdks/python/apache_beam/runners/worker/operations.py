@@ -29,6 +29,7 @@ import threading
 from builtins import filter
 from builtins import object
 from builtins import zip
+from cachetools.lru import LRUCache
 
 from apache_beam import pvalue
 from apache_beam.internal import pickler

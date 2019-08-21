@@ -79,6 +79,9 @@ class SdkHarness(object):
         state_handler_factory=self._state_handler_factory,
         data_channel_factory=self._data_channel_factory,
         fns=self._fns)
+    # TODO: neeed to get the state_handler but handler changes with the bundle processor.
+    self._state_cache = _CrossBundleStateCache(state_handler=??)
+
     # workers for process/finalize bundle.
     self.workers = queue.Queue()
     # one worker for progress/split request.
@@ -329,6 +332,82 @@ class BundleProcessorCache(object):
         cached_bundle_processors.pop().shutdown()
 
 
+class _StateCacheEntry(object):
+
+  def __ini__(self,
+              cache_token,
+              encoded_data):
+    self._cache_token = cache_token
+    self._encoded_data = encoded_data
+
+
+class _CrossBundleStateCache(object):
+
+  def __init__(self,
+               state_handler,
+               cache_max_size=512):
+    self._cache_max_size = cache_max_size
+    self._state_handler = state_handler
+    self._cache = LRUCache(maxsize=self._cache_max_size)  # TODO: the cache size should be configurable.
+    self._valid_cache_tokens_state_key = dict()
+    # To keep track if any of the elements of the cache is mutated.
+    # if it is then it needs to sync with the the runner.
+    self._modified = False
+
+  def update_cache(self, cache_tokens):
+    #TODO: This method will basically invalidate the cache and keep the cache tokens
+
+    for token in cache_tokens:
+      # Just initialize the mapping with None. Later we can update this.
+      self._valid_cache_tokens_state_key[token] = None
+    self._cache = LRUCache(maxsize=self._cache_max_size)
+
+  def get(self, state_key):
+    # TODO: Need to get the cache token mapping
+    # TODO: need to add metrics
+    cached_values = self._cache.get(state_key)
+
+    if cached_values is not None:
+      return cached_values
+
+    cached_values = []
+    data, continuation_token, cache_token = self._state_handler.blocking_get(self._state_key)
+    while True:
+      while len(data) > 0:
+        cached_values.append(data)
+        if not continuation_token:
+          break
+        else:
+          data, continuation_token, cache_token = self._state_handler.blocking_get(
+              self._state_key, continuation_token)
+
+    if cache_token:
+      # If cache token is present that means we need to cache this value.
+      self._valid_cache_tokens[cache_token] = state_key
+      self._cache[state_key] = _StateCacheEntry(cache_token=cache_token,
+                                                encoded_data=cached_values)
+
+    return cached_values
+
+  def append(self, state_key, encoded_data):
+    # First write to the runner
+    cache_token = self._state_handler.blocking_append(state_key, encoded_data)
+
+    if cache_token:
+      cache_value = _StateCacheEntry(
+        cache_token=cache_token,
+        encoded_data=encoded_data)
+      self._cache[state_key] = cache_value
+      self._valid_cache_tokens_state_key[cache_token] = state_key
+
+  def clear(self, state_key):
+    # First send the request to the runner
+    cache_token = self._state_handler.blocking_clear(state_key)
+    if cache_token and state_key in self._cache:
+      # Just make sure that the value is not there in the cache
+      del self._cache[state_key]
+      del self._valid_cache_tokens_state_key[cache_token]
+
 class SdkWorker(object):
 
   def __init__(self, bundle_processor_cache, profiler_factory=None):
@@ -361,6 +440,8 @@ class SdkWorker(object):
   def process_bundle(self, request, instruction_id):
     bundle_processor = self.bundle_processor_cache.get(
         instruction_id, request.process_bundle_descriptor_reference)
+    # TODO: Add all cache tokens to the cache
+
     try:
       with bundle_processor.state_handler.process_instruction_id(
           instruction_id):
@@ -584,19 +665,14 @@ class GrpcStateHandler(object):
             state_key=state_key,
             get=beam_fn_api_pb2.StateGetRequest(
                 continuation_token=continuation_token)))
-    if response.cache_token:
-      # TODO: need to cache this.
-      pass
-    return response.get.data, response.get.continuation_token
+    return response.get.data, response.get.continuation_token, response.cache_token
 
   def blocking_append(self, state_key, data):
     response = self._blocking_request(
         beam_fn_api_pb2.StateRequest(
             state_key=state_key,
             append=beam_fn_api_pb2.StateAppendRequest(data=data)))
-    if response.cache_token:
-      # TODO: need to cache this
-      pass
+    return  response.cache_token
 
   def blocking_clear(self, state_key):
     response = self._blocking_request(

@@ -198,6 +198,7 @@ class DataInputOperation(RunnerIOOperation):
       self.started = False
 
 
+
 class _StateBackedIterable(object):
   def __init__(self, state_handler, state_key, coder_or_impl):
     self._state_handler = state_handler
@@ -208,7 +209,6 @@ class _StateBackedIterable(object):
       self._coder_impl = coder_or_impl
 
   def __iter__(self):
-    # This is the continuation token this might be useful
     data, continuation_token = self._state_handler.blocking_get(self._state_key)
     while True:
       input_stream = coder_impl.create_InputStream(data)
@@ -267,6 +267,7 @@ class StateBackedSideInputMap(object):
               keyed_state_key.CopyFrom(state_key)
               keyed_state_key.multimap_side_input.key = (
                   key_coder_impl.encode_nested(key))
+              # TODO: A reference how StateBackedItrable is cached
               cache[key] = _StateBackedIterable(
                   state_handler, keyed_state_key, value_coder)
             return cache[key]
