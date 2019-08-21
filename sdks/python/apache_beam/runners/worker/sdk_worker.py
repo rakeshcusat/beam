@@ -338,8 +338,8 @@ class _StateCacheEntry(object):
   def __ini__(self,
               cache_token,
               encoded_data):
-    self._cache_token = cache_token
-    self._encoded_data = encoded_data
+    self.cache_token = cache_token
+    self.encoded_data = encoded_data
 
 
 class _CrossBundleStateCache(object):
@@ -366,10 +366,12 @@ class _CrossBundleStateCache(object):
   def get(self, state_key):
     # TODO: Need to get the cache token mapping
     # TODO: need to add metrics
-    cached_values = self._cache.get(state_key)
 
-    if cached_values is not None:
-      return cached_values
+    cached_value = self._cache.get(state_key)
+
+    if cached_value is not None \
+        and cached_value.cache_token in self._valid_cache_tokens_state_key:
+      return cached_value.encoded_data
 
     cached_values = []
     data, continuation_token, cache_token = self._state_handler.blocking_get(self._state_key)
