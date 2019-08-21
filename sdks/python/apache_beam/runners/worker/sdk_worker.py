@@ -117,7 +117,8 @@ class SdkHarness(object):
       # centralized function list shared among all the workers.
       self.workers.put(
           SdkWorker(self._bundle_processor_cache,
-                    profiler_factory=self._profiler_factory))
+                    profiler_factory=self._profiler_factory,
+                    cross_bundle_state_cache=self._state_cache))
 
     def get_responses():
       while True:
@@ -410,10 +411,13 @@ class _CrossBundleStateCache(object):
 
 class SdkWorker(object):
 
-  def __init__(self, bundle_processor_cache, profiler_factory=None):
+  def __init__(self,
+               bundle_processor_cache,
+               profiler_factory=None,
+               cross_bundle_state_cache=None):
     self.bundle_processor_cache = bundle_processor_cache
     self.profiler_factory = profiler_factory
-
+    self._cross_bundle_state_cache = cross_bundle_state_cache
   def do_instruction(self, request):
     request_type = request.WhichOneof('request')
     if request_type:
@@ -441,7 +445,7 @@ class SdkWorker(object):
     bundle_processor = self.bundle_processor_cache.get(
         instruction_id, request.process_bundle_descriptor_reference)
     # TODO: Add all cache tokens to the cache
-
+    self._cross_bundle_state_cache.update_cache(request.cache_tokens)
     try:
       with bundle_processor.state_handler.process_instruction_id(
           instruction_id):
